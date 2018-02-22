@@ -14,12 +14,14 @@ $diagram = new SimpleXMLElement($myReceivedArr[2]);
 //echo $myReceivedArr[2];
 $root = $diagram->children();
 $legalItemList = array();
+$legalBottomItemList = array();
 $componentList = array();
 $PRList = array();
 $illegalItemList = array();
 $resultsArr = array();
 $componentValueArray = array();
 $layer1Items = array();
+$layer1BottomItems = array();
       /*  foreach($child as $key => $value) {
         /*
         if($role == "Language")
@@ -63,18 +65,18 @@ foreach($root->children() as $child) {
             }else if(strpos($value, 'component') !== false) {
                // echo "component";
                 $item = array("component",$child);
-                array_push($legalItemList,$item);
+                array_push($legalBottomItemList,$item);
                 array_push($componentValueArray, $child["value"]);
                 if (strpos($child['parent'], '1') !== false) {
-                    array_push($layer1Items,$item);
+                    array_push($layer1BottomItems,$item);
                 }
             }else if(strpos($value, 'parentComponent') !== false) {
                // echo "parentComponent";
                 $item = array("parentComponent",$child);
-                array_push($legalItemList,$item);
+                array_push($legalBottomItemList,$item);
                 array_push($componentValueArray, $child["value"]);
                 if (strpos($child['parent'], '1') !== false) {
-                    array_push($layer1Items,$item);
+                    array_push($layer1BottomItems,$item);
                 }
             }else if(strpos($value, 'cShape') !== false) {
                 //echo "cShape";
@@ -106,6 +108,8 @@ foreach($root->children() as $child) {
         }
     }
 }
+$layer1Items = array_merge($layer1Items, $layer1BottomItems);
+$legalItemList = array_merge($legalItemList, $legalBottomItemList);
 //after sorting diagram components into their own types, perform checking on individual item
 
 //Varname check for all component diagrams (parent and child)
@@ -381,15 +385,17 @@ foreach($legalItemList as $item){
                                         //$error = array($siblingID,"Connected Type B");
                                         //array_push($resultsArr,$error);
                                         }else{
-                                            $error = array($siblingID,"Provided interface of ID: ".$siblingID." connection is not connected properly with Required interface of ID: ".$othersiblingID);
+                                            $error = array($siblingID,"Provided interface of ID: ".$siblingID." connection is not connected properly with required interface of ID: ".$othersiblingID);
                                             array_push($resultsArr,$error);
                                         }
                             }else{
                                 // echo "sibling overlapp sibling"
                                 // given that both connectors are not the same type
                                 if(!((strcmp($sibling[0],"component")==false && (strcmp($otherSibling[0],"provideInterface")==false))||(strcmp($otherSibling[0],"requireInterface")==false && (strcmp($sibling[0],"component")==false)))){
-                                    $error = array($siblingID,"The ".$sibling[0]." object of ID:".$sibling[1]["id"]." has overlap its sibling object of ID: ".$otherSibling[1]["id"]);
-                                    array_push($resultsArr,$error);
+                                    if(!((strcmp($sibling[0],"provideInterface")==false || (strcmp($sibling[0],"requireInterface")==false)))){
+                                        $error = array($siblingID,"The ".$sibling[0]." object of ID:".$sibling[1]["id"]." has overlap its sibling object of ID: ".$otherSibling[1]["id"]);
+                                        array_push($resultsArr,$error);
+                                    }
                                 }
                             }
                         }else{
@@ -513,7 +519,7 @@ foreach($layer1Items as $itemKey => $item){
     $itemHeight =(int)$itemGeo[0]["height"];
     $itemEndX=(int) $itemWidth+ $itemStartX;
     $itemEndY=(int) $itemHeight+ $itemStartY;
-    $found = 0;//check if required or provided socket is connected to a component or parent component
+    $itemIntersect = 1;//check if required or provided socket is connected to a component or parent component
     foreach($layer1Items as $siblingItem){
         $siblingItemID = $siblingItem[1]["id"];
         if((strcmp($siblingItemID,$itemID)!=false)){
@@ -660,9 +666,12 @@ foreach($layer1Items as $itemKey => $item){
                                     if(checkIntersect($siblingItemCoordsArray ,$itemCoordsArray,5)){
                                         //there is overlapp
                                         //do nothing
-                                        if(checkIntersect($siblingItemCoordsArray ,$itemCoordsArray,1)){
+                                        if(checkIntersect($tempItemCoordsArray ,$itemCoordsArray,1)){
                                             $error = array($itemID,"The ".$item[0]." object of ID: ".$item[1]["id"]." has overlap with ".$siblingItem[0]." object of ID: ".$siblingItem[1]["id"]);
                                             array_push($resultsArr,$error);
+                                            $itemIntersect = 0;
+                                        }else{
+                                            $itemIntersect = 0;
                                         }
                                     }else {
                                         //echo "Connected";
@@ -684,10 +693,12 @@ foreach($layer1Items as $itemKey => $item){
                             $tempItemCoordsArray=getRotation($tempComponentStartX,$temptComponentStartY,$temptComponentEndX,$temptComponentEndY,$siblingItemRotation,$tempItemCoordsArray,$siblingItem[0]);
                             if(checkIntersect($siblingItemCoordsArray, $itemCoordsArray,4)){
                                 //there is overlapp
-                                //do nothing
-                                if(checkIntersect($siblingItemCoordsArray,$tempItemCoordsArray, 1)){
+                                if(checkIntersect($tempItemCoordsArray, $itemCoordsArray, 1)){
                                     $error = array($itemID,"The ".$item[0]." object of ID: ".$item[1]["id"]." has overlap with ".$siblingItem[0]." object of ID: ".$siblingItem[1]["id"]);
                                     array_push($resultsArr,$error);
+                                    $itemIntersect = 0;
+                                }else{
+                                    $itemIntersect = 0;
                                 }
                             }else {
                                 //echo "Connected";
@@ -707,6 +718,13 @@ foreach($layer1Items as $itemKey => $item){
                     }
             }
         }
+    }
+    if ($itemIntersect > 0 && strcmp($item[0],"requireInterface")==false){
+        $error = array($itemID,"The ".$item[0]." object of ID: ".$item[1]["id"]." is not connected to any component or port of a parent component.");
+        array_push($resultsArr,$error);
+    }else if ($itemIntersect > 0 && strcmp($item[0],"provideInterface")==false){
+        $error = array($itemID,"The ".$item[0]." object of ID: ".$item[1]["id"]." is not connected to any component or port of a parent component.");
+        array_push($resultsArr,$error);
     }
     unset($layer1Items[$itemKey]);
 }
