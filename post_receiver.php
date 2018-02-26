@@ -22,6 +22,7 @@ $resultsArr = array();
 $componentValueArray = array();
 $layer1Items = array();
 $layer1BottomItems = array();
+$dependencyArray = array();
       /*  foreach($child as $key => $value) {
         /*
         if($role == "Language")
@@ -89,10 +90,11 @@ foreach($root->children() as $child) {
             }else if(strpos($value, 'dependency') !== false) {
                 //echo "dependency";
                 $item = array("dependency",$child);
-                array_push($legalItemList,$item);
+                /*array_push($legalItemList,$item);
                 if (strpos($child['parent'], '1') !== false) {
                     array_push($layer1Items,$item);
-                }
+                }*/
+                array_push($dependencyArray, $item);
             }else if(strpos($value, 'text') !== false) {
                // echo "text";
                 $item = array("text",$child);
@@ -118,6 +120,7 @@ foreach($legalItemList as $item){
         //check for value
         $xmlNode = $item[1];
         $itemValue= strtolower($xmlNode["value"]);
+
         //correct forms of annotation
         $query1 ="«annotation»";
         $query2 ="&laquo;annotation&raquo;";
@@ -264,7 +267,7 @@ foreach($legalItemList as $item){
                                 if(!($childWidth==$childHeight)){
                                     //cannot be too big
                                     //check is a square
-                                    $error = array($item[1]["id"],"The height and width of ".$child[0]." child object of ID:".$xmlNode["id"]." must be equal");
+                                    $error = array($item[1]["id"],"The height and width of ".$child[0]." child object of ID:".$xmlNode["id"]." must be equal.");
                                     array_push($resultsArr,$error);
                                 }
                             }
@@ -728,10 +731,215 @@ foreach($layer1Items as $itemKey => $item){
     }
     unset($layer1Items[$itemKey]);
 }
+/* After checking items in level 1, check for connections added in diagram.
+    Rules:
+    - All connections are component to component
+    - connections should not overlap parent component 
+    - Array Points should be within the parent component
+*/
+foreach($dependencyArray as $itemKey => $dependencyItem){
+    //check if style of the arrow is correct
+    //check for the source and target of the item it links 
+    $dependencyItemID = $dependencyItem[1]["id"];
+    $sourceID = $dependencyItem[1]["source"];
+    $targetID = $dependencyItem[1]["target"];
+    $parentID = $dependencyItem[1]["parent"];
+    $sourceItemType = "";
+    $targetItemType = "";
+    $parentItemType = "";
+    $parentItem;
+    $sourceItem;
+    $targetItem;
+    foreach($legalItemList as $diagramItemKey => $item){
+        $itemID = $item[1]["id"];
+        //echo "Check ID ".$itemID." with ".$sourceID. " and ".$targetID;
+        if(strcmp($itemID,$sourceID) == false){
+            $sourceItemType = $item[0];
+            $sourceItem = $item;
+        }
+        if(strcmp($itemID,$targetID) == false){
+            $targetItemType = $item[0];
+            $targetItem = $item;
+        }
+        if(strcmp($itemID,$parentID) == false){
+            $parentItemType = $item[0];
+            $parentItem = $item;
+        }
+    }
+    if(empty($sourceID)){
+        $error = array($dependencyItemID, "The connector ".$dependencyItem[0]. " of ID 
+        ".$dependencyItemID." is not connected from a source object.");
+        array_push($resultsArr,$error);
+    }
+    if(empty($targetID)){
+        $error = array($dependencyItemID, "The connector ".$dependencyItem[0]. " of ID 
+        ".$dependencyItemID." is not connected to a target object.");
+        array_push($resultsArr,$error);
+    }
+    if(!empty($sourceItemType) && !empty($targetItemType)){
+        if(strcmp($sourceID, $targetID) == false){
+            $error = array($dependencyItemID, "The source and target item connected by connector ".$dependencyItem[0]. " of ID 
+            ".$dependencyItemID." are the same which is incorrect.");
+            array_push($resultsArr,$error);
+        }
+        if(((strcmp($sourceItemType,"component") == false) || (strcmp($sourceItemType, "parentComponent") == false)) && ((strcmp($targetItemType, "parentComponent") == false) || (strcmp($targetItemType,"component") == false))){
+            //they must be within the same parent
+            //check coordinates of source and target
+            if(strcmp($sourceItem[1]["parent"], $targetItem[1]["parent"]) == true){
+                //either the component is connected to or from a parent component
+                if(strcmp($dependencyItem[1]["parent"], $targetID) == false){
+                    //the other connected item must be a child of this parent else error.
+                    if(strcmp($sourceItem[1]["parent"], $targetID) == true){
+                        //report if there is any error.
+                        $error = array($dependencyItemID, "The component of ID ".$sourceItem[1]["id"]." and component of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                        ".$dependencyItemID." as both components do not belong in the same parent.");
+                        array_push($resultsArr,$error);
+                    }else{
+                        //check if the connection is connected to any required or provided interface. should be only one of them, if nothing error.
+
+                    }
+                }else if(strcmp($dependencyItem[1]["parent"], $sourceID) == false ){
+                    //the other connected item must be a child of this parent else error.
+                    if(strcmp($targetItem[1]["parent"], $sourceID) == true){
+                        //report if there is any error.
+                        $error = array($dependencyItemID, "The component of ID ".$sourceItem[1]["id"]." and component of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                        ".$dependencyItemID." as both components do not belong in the same parent.");
+                        array_push($resultsArr,$error);
+                    }else{
+                        //check if the connection is connected to any required or provided interface. should be only one of them, if nothing error.
+
+                    }
+                }else{
+                    //anything else for parent component and component connection will be incorrect
+                    $error = array($dependencyItemID, "The component of ID ".$sourceItem[1]["id"]." and component of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." as both components do not belong in the same parent.");
+                    array_push($resultsArr,$error);
+                    break;
+                }
+            }
+        }else if(strcmp($sourceItemType, "port") == false ){
+            //if source is a port means the target must be a component or parent component within the parent component.
+            if(strcmp($targetItemType, "component") == true || strcmp($targetItemType, "parentComponent") == true){
+                $error = array($dependencyItemID, "The port of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                ".$dependencyItemID." as both a port must be connected to a component or parent component.");
+                array_push($resultsArr,$error);
+            }else{
+                //check if the component or parent component is the same parent as the port.
+                //assume that port only exists at the top most layer.(need to re-check.)
+                if(strcmp($targetItem[1]["parent"], $sourceItem[1]["parent"])==true ){
+                    //if they do not belong to the same parent, error.
+                    $error = array($dependencyItemID, "The port of ID ".$sourceItem[1]["id"]." and component of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." as both components do not belong in the same parent.");
+                    array_push($resultsArr,$error);
+                }
+            }
+        }else if($targetItemType == "port"){
+            // if source is a port means the source must be from a component within the same parent component with the parent.
+            if($sourceItemType != "component" || $sourceItemType!= "parentComponent"){
+                $error = array($dependencyItemID, "The port of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                ".$dependencyItemID." as both a port must be connected from a component or parent component.");
+                array_push($resultsArr,$error);
+            }else{
+                //check if the component or parent component is the same parent as the port.
+                //assume that port only exists at the top most layer.(need to re-check.)
+                if(strcmp($targetItem[1]["parent"], $sourceItem[1]["parent"])==true ){
+                    //if they do not belong to the same parent, error.
+                    $error = array($dependencyItemID, "The component of ID ".$sourceItem[1]["id"]." and port of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." as both components do not belong in the same parent.");
+                    array_push($resultsArr,$error);
+                }
+            }
+        }else{
+            // any other thing that are connected with connector is deem incorrect
+            $error = array($dependencyItemID, "The object of ID ".$sourceItem[1]["id"]." and object of ID ".$targetItem[1]["id"]." is incorrectly connected by connector ".$dependencyItem[0]. " of ID 
+            ".$dependencyItemID." as both objects are not suitable for the connection.");
+            array_push($resultsArr,$error);
+        }
+    }// end of check if target or source item is empty
+    //if the connector is within a parent component, we check if any points of the arrow is outside the border of the compopent. (Assuming overlapping is acceptable)
+    if(strcmp($parentItemType, "parentComponent") == false && strcmp($parentID, "1") == true){
+        //check if connector is located within the parent component.
+        $itemID = $parentItem[1]["id"];
+        $itemGeo = $parentItem[1]->children();
+        $itemStartX =(int) 0;
+        $itemStartY = (int)0;
+        $itemWidth =(int) $itemGeo[0]["width"];
+        $itemHeight =(int)$itemGeo[0]["height"];
+        $itemEndX=(int) $itemWidth+ $itemStartX;
+        $itemEndY=(int) $itemHeight+ $itemStartY;
+        $styleElements = explode(";", $parentItem[1]['style']);
+        $itemRotation = 0;
+        $itemCoordsArray= array();
+        foreach($styleElements as $value) {
+            if (strpos($value, 'rotation=') !== false) {
+                $itemRotation= (int) str_replace("rotation=","",$value);
+            }
+        }
+        $itemCoordsArray=getRotation($itemStartX,$itemStartY,$itemEndX,$itemEndY,$itemRotation,$itemCoordsArray,$parentItemType);
+        //check if the source point and the target point is in the parent component
+        $connectorItemGeo = $dependencyItem[1]->children();
+        foreach($connectorItemGeo->children() as $mxPoint){
+            if(strcmp($mxPoint["as"], "sourcePoint") == false){
+                $sourceX = $mxPoint["x"];
+                $sourceY = $mxPoint["y"];
+                $tempCoordinates = array
+                (
+                array($sourceX, $sourceY),
+                array($sourceX, $sourceY),
+                array($sourceX, $sourceY),
+                array($sourceX, $sourceY)
+                );
+               /* echo $itemCoordsArray[0][0]." ".$itemCoordsArray[0][1]." ".$itemCoordsArray[1][0]." ".$itemCoordsArray[1][1]." ".$itemCoordsArray[2][0]." ".$itemCoordsArray[2][1]." ".$itemCoordsArray[3][0]." ".$itemCoordsArray[3][1];
+                echo "AB ".$sourceX."...".$sourceY;*/
+                if(!checkIntersect($itemCoordsArray, $tempCoordinates, 1)){
+                    $error = array($dependencyItemID, "The source location of ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." is not within its parent component.");
+                    array_push($resultsArr,$error);
+                }
+            }else if(strcmp($mxPoint["as"], "targetPoint") == false){
+                $targetX = $mxPoint["x"];
+                $targetY = $mxPoint["y"];
+                $tempCoordinates = array
+                (
+                array($targetX, $targetY),
+                array($targetX, $targetY),
+                array($targetX, $targetY),
+                array($targetX, $targetY)
+                );
+                if(!checkIntersect($itemCoordsArray, $tempCoordinates, 1)){
+                    $error = array($dependencyItemID, "The target location of ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." is not within its parent component.");
+                    array_push($resultsArr,$error);
+                }
+            }else if(strcmp($mxPoint["as"], "points") == false){
+                $count = 0;
+                foreach($mxPoint->children() as $coords){
+                    $tempCoordinates = array
+                    (
+                    array($coords["x"], $coords["y"]),
+                    array($coords["x"], $coords["y"]),
+                    array($coords["x"], $coords["y"]),
+                    array($coords["x"], $coords["y"])
+                    );
+                    if(!checkIntersect($itemCoordsArray, $tempCoordinates, 1)){
+                        $count++;
+                    } 
+                }
+                if($count>0){
+                    $error = array($dependencyItemID, "At least one of edge of ".$dependencyItem[0]. " of ID 
+                    ".$dependencyItemID." is not within the connector's parent component.");
+                    array_push($resultsArr,$error);
+                }
+            }
+        }
+    }
+}
 
 $resultsArr=checkItemRotation($legalItemList,$resultsArr);
 //$resultsArr = array_unique($resultsArr);
 echo json_encode($resultsArr);
+
+
 function trimName($inName) {
     $componentName = str_replace("&nbsp;", "", $inName);
     $componentName = strip_tags($componentName);
@@ -757,7 +965,7 @@ function checkItemRotation($itemList,$resultsArr){
                     if (strpos($value, 'rotation=') !== false) {
                         if (strcmp($value, 'rotation=0')) {
                             //$error = array($item[1]["id"],$item[0]." of ID: ".$item[1]['id']." has a rotation that is not 0 which is incorrect.".$value."and".strcmp($value, 'rotation=0'));
-                            $error = array($item[1]["id"],$item[0]." of ID: ".$item[1]['id']." has a rotation that is not 0 which is incorrect.");
+                            $error = array($item[1]["id"], "The ".$item[0]." of ID: ".$item[1]['id']." has a rotation that is not 0 which is incorrect.");
                             array_push($resultsArr,$error);
                         }
                     }
