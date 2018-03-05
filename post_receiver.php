@@ -752,6 +752,7 @@ foreach($dependencyArray as $itemKey => $dependencyItem){
     $targetItem;
     foreach($legalItemList as $diagramItemKey => $item){
         $itemID = $item[1]["id"];
+        //find the source and target item type
         //echo "Check ID ".$itemID." with ".$sourceID. " and ".$targetID;
         if(strcmp($itemID,$sourceID) == false){
             $sourceItemType = $item[0];
@@ -796,7 +797,73 @@ foreach($dependencyArray as $itemKey => $dependencyItem){
                         array_push($resultsArr,$error);
                     }else{
                         //check if the connection is connected to any required or provided interface. should be only one of them, if nothing error.
-
+                        //target of arrow is the parent component
+                        //get parent component details
+                        $itemID = $parentItem[1]["id"];
+                        $itemParent = $parentItem[1]["parent"];
+                        $itemGeo = $parentItem[1]->children();
+                        $itemStartX =(int) $itemGeo[0]["x"];
+                        $itemStartY = (int) $itemGeo[0]["y"];
+                        //find all provided interface with the parent iD of the parent component. for each interface found, check if the location of tail is at the connection of target
+                        //calculate area of contact
+                       /* [0] - Left Top point
+                        * [1] - Right Top Point
+                        * [2] - Left Bottom Point
+                        * [3] - Right Bottom Point*/
+                        $connectorItemGeo = $dependencyItem[1]->children();
+                        $mxPoint = $connectorItemGeo->children();
+                        foreach($connectorItemGeo->children() as $mxPoint){
+                            if(strcmp($mxPoint["as"], "targetPoint") == false){
+                                $sourceX = $mxPoint["x"];
+                                $sourceY = $mxPoint["y"];
+                                $trueCoordinates = array
+                                (
+                                array($itemStartX+$sourceX-5, $itemStartY+$sourceY-5),
+                                array($itemStartX+$sourceX+5, $itemStartY+$sourceY-5),
+                                array($itemStartX+$sourceX+5, $itemStartY+$sourceY+5),
+                                array($itemStartX+$sourceX-5, $itemStartY+$sourceY+5)
+                                );
+                                break;
+                            }
+                        }
+                        $found = false;
+                        //search for components that are connected to the parent of the dependency component.
+                        foreach($legalItemList as $diagramItemKey => $item){
+                            $itemID = $item[1]["parent"];
+                            if(strcmp($itemID, $itemParent) == false){
+                                //calculate coordinates and check intersection
+                                //check if connector is located within the parent component.
+                                $itemID = $item[1]["id"];
+                                $itemGeo = $item[1]->children();
+                                $itemStartX =(int) $itemGeo[0]["x"];
+                                $itemStartY = (int) $itemGeo[0]["y"];
+                                $itemWidth =(int) $itemGeo[0]["width"];
+                                $itemHeight =(int)$itemGeo[0]["height"];
+                                $itemEndX=(int) $itemWidth+ $itemStartX;
+                                $itemEndY=(int) $itemHeight+ $itemStartY;
+                                $styleElements = explode(";", $parentItem[1]['style']);
+                                $itemRotation = 0;
+                                $itemCoordsArray= array();
+                                foreach($styleElements as $value) {
+                                    if (strpos($value, 'rotation=') !== false) {
+                                        $itemRotation= (int) str_replace("rotation=","",$value);
+                                    }
+                                }
+                                $itemCoordsArray=getRotation($itemStartX,$itemStartY,$itemEndX,$itemEndY,$itemRotation,$itemCoordsArray,$item[0]);
+                                if(checkIntersect($trueCoordinates, $itemCoordsArray, 1)){
+                                    if(strcmp($item[0], "provideInterface") == false){
+                                        $found =true;
+                                    }else{
+                                        $error = array($dependencyItemID, $item[0]." of ID ".$itemID." is found to be connected by ".$dependencyItem[0]." of ID " .$dependencyItemID ." is incorrect through parent component of ID ".$targetID);
+                                        array_push($resultsArr,$error);
+                                    }
+                                }
+                            }
+                        }
+                        if($found == false){
+                            $error = array($dependencyItemID, "No provided interface found connected to parent component of ID ".$targetID." which is also connected by ".$dependencyItem[0]." of ID " .$dependencyItemID ."");
+                            array_push($resultsArr,$error);
+                        }
                     }
                 }else if(strcmp($dependencyItem[1]["parent"], $sourceID) == false ){
                     //the other connected item must be a child of this parent else error.
@@ -807,7 +874,76 @@ foreach($dependencyArray as $itemKey => $dependencyItem){
                         array_push($resultsArr,$error);
                     }else{
                         //check if the connection is connected to any required or provided interface. should be only one of them, if nothing error.
-
+                        //target of arrow is the parent component
+                        //get parent component details
+                        $itemID = $parentItem[1]["id"];
+                        $itemParent = $parentItem[1]["parent"];
+                        $itemGeo = $parentItem[1]->children();
+                        $itemStartX =(int) $itemGeo[0]["x"];
+                        $itemStartY = (int) $itemGeo[0]["y"];
+                        //find all provided interface with the parent iD of the parent component. for each interface found, check if the location of tail is at the connection of target
+                        //calculate area of contact
+                       /* [0] - Left Top point
+                        * [1] - Right Top Point
+                        * [2] - Left Bottom Point
+                        * [3] - Right Bottom Point*/
+                        $connectorItemGeo = $dependencyItem[1]->children();
+                        $mxPoint = $connectorItemGeo->children();
+                        foreach($connectorItemGeo->children() as $mxPoint){
+                            if(strcmp($mxPoint["as"], "sourcePoint") == false){
+                                $sourceX = 0;
+                                $sourceY = 0;
+                                $sourceX = $mxPoint["x"];
+                                $sourceY = $mxPoint["y"];
+                                $trueCoordinates = array
+                                (
+                                array($itemStartX+$sourceX-5, $itemStartY+$sourceY-5),
+                                array($itemStartX+$sourceX+5, $itemStartY+$sourceY-5),
+                                array($itemStartX+$sourceX+5, $itemStartY+$sourceY+5),
+                                array($itemStartX+$sourceX-5, $itemStartY+$sourceY+5)
+                                );
+                                echo "bbbb".$itemStartX+$sourceX-5;
+                                break;
+                            }
+                        }
+                        $found = false;
+                        //search for components that are connected to the parent of the dependency component.
+                        foreach($legalItemList as $diagramItemKey => $item){
+                            $itemID = $item[1]["parent"];
+                            if(strcmp($itemID, $itemParent) == false){
+                                //calculate coordinates and check intersection
+                                //check if connector is located within the parent component.
+                                $itemID = $item[1]["id"];
+                                $itemGeo = $item[1]->children();
+                                $itemStartX =(int) $itemGeo[0]["x"];
+                                $itemStartY = (int) $itemGeo[0]["y"];
+                                $itemWidth =(int) $itemGeo[0]["width"];
+                                $itemHeight =(int)$itemGeo[0]["height"];
+                                $itemEndX=(int) $itemWidth+ $itemStartX;
+                                $itemEndY=(int) $itemHeight+ $itemStartY;
+                                $styleElements = explode(";", $parentItem[1]['style']);
+                                $itemRotation = 0;
+                                $itemCoordsArray= array();
+                                foreach($styleElements as $value) {
+                                    if (strpos($value, 'rotation=') !== false) {
+                                        $itemRotation= (int) str_replace("rotation=","",$value);
+                                    }
+                                }
+                                $itemCoordsArray=getRotation($itemStartX,$itemStartY,$itemEndX,$itemEndY,$itemRotation,$itemCoordsArray,$item[0]);
+                                if(checkIntersect($trueCoordinates, $itemCoordsArray, 1)){
+                                    if(strcmp($item[0], "requireInterface") == false){
+                                        $found =true;
+                                    }else{
+                                        $error = array($dependencyItemID, $item[0]." of ID ".$itemID." is found to be connected by ".$dependencyItem[0]." of ID " .$dependencyItemID ." is incorrect through parent component of ID ".$targetID);
+                                        array_push($resultsArr,$error);
+                                    }
+                                }
+                            }
+                        }
+                        if($found == false){
+                            $error = array($dependencyItemID, "No required interface found connected to parent component of ID ".$targetID." which is also connected by ".$dependencyItem[0]." of ID " .$dependencyItemID ."");
+                            array_push($resultsArr,$error);
+                        }
                     }
                 }else{
                     //anything else for parent component and component connection will be incorrect
